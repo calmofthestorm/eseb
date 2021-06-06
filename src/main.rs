@@ -8,13 +8,18 @@ use clap::App;
 use keys::{KeyMaterial, SymmetricKey};
 use sodiumoxide::crypto::secretstream;
 
+include!(concat!(env!("OUT_DIR"), "/generated_stamp.rs"));
+
 // Encrypts/decrypts messages. Does not use AES-128.
 
 fn fmain() -> Result<()> {
     sodiumoxide::init().map_err(|_| Error::msg("failed to init sodiumoxide"))?;
 
     let matches = App::new("eseb")
-        .about("Elixir's Simple Encoder Binary (simple wrapper around nacl)")
+        .name(env!("CARGO_PKG_NAME"))
+        .about("Elixir's Simple Encoder Binary, a simple wrapper around NaCl to perform symmetric encryption and verification of files.")
+        .version(format!("{} ({})", env!("CARGO_PKG_VERSION"), BUILD_STAMP.git_revision_cleanness()).as_ref())
+        .author(env!("CARGO_PKG_AUTHORS"))
         .subcommand(
             App::new("encrypt")
                 .about("Encrypt and sign")

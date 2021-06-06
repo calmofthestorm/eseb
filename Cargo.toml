@@ -14,3 +14,7 @@ clap = "2.33.0"
 crc16 = "0"
 base64 = "0"
 sodiumoxide = "0.2.5"
+build_stamp = "1"
+
+[build-dependencies]
+build_stamp = "1"
