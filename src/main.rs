@@ -8,11 +8,13 @@ use clap::App;
 use keys::{KeyMaterial, SymmetricKey};
 use sodiumoxide::crypto::secretstream;
 
+// Encrypts/decrypts messages. Does not use AES-128.
+
 fn fmain() -> Result<()> {
     sodiumoxide::init().map_err(|_| Error::msg("failed to init sodiumoxide"))?;
 
     let matches = App::new("eseb")
-        .about("Elixir's Simple Encoder Binary (simple wrapper around nacl).")
+        .about("Elixir's Simple Encoder Binary (simple wrapper around nacl)")
         .subcommand(
             App::new("encrypt")
                 .about("Encrypt and sign")
@@ -40,6 +42,12 @@ fn fmain() -> Result<()> {
 
         write_record(&mut stdout, header.as_ref()).context("write header to stdout")?;
 
+        // Probably not necessary but should be sufficient.
+        let message = stream
+            .push(b"", None, secretstream::Tag::Message)
+            .map_err(|_| Error::msg("secret stream push initial"))?;
+        write_record(&mut stdout, &message).context("write initial crypttext to stdout")?;
+
         loop {
             let data = stdin.fill_buf().context("read cleartext from stdin")?;
             let n = data.len();
@@ -55,6 +63,11 @@ fn fmain() -> Result<()> {
 
             stdin.consume(n);
         }
+
+        let message = stream
+            .push(b"", None, secretstream::Tag::Final)
+            .map_err(|_| Error::msg("secret stream push final"))?;
+        write_record(&mut stdout, &message).context("write initial crypttext to stdout")?;
     } else if let Some(matches) = matches.subcommand_matches("decrypt") {
         let key = load_key(matches.value_of("symmetric").expect("validate flags"))?;
 
@@ -73,13 +86,46 @@ fn fmain() -> Result<()> {
         let mut stream = secretstream::xchacha20poly1305::Stream::init_pull(&header, key.as_ref())
             .map_err(|_| Error::msg("init_pull secret stream"))?;
 
+        // IDT we actually need these but it's easier this way.
+        read_record(&mut stdin, &mut buf).context("read header from stdin")?;
+
+        if stream.is_finalized() {
+            return Err(Error::msg("decrypt stream finalized earlier than expected"));
+        }
+
+        let (message, tag) = stream
+            .pull(&buf, None)
+            .map_err(|_| Error::msg("secret stream pull"))?;
+
+        if tag != secretstream::Tag::Message {
+            return Err(Error::msg("incorrect tag"));
+        }
+
+        if !message.is_empty() {
+            return Err(Error::msg("initial message not empty"));
+        }
+
         loop {
             buf.clear();
             read_record(&mut stdin, &mut buf).context("read record")?;
 
-            let (message, _tag) = stream
+            let (message, tag) = stream
                 .pull(&buf, None)
                 .map_err(|_| Error::msg("secret stream pull"))?;
+
+            if stream.is_finalized() != (tag == secretstream::Tag::Final) {
+                return Err(Error::msg("tag final mismatch"));
+            }
+
+            if stream.is_finalized() {
+                read_record(&mut stdin, &mut buf).context("read record")?;
+                if !buf.is_empty() {
+                    return Err(Error::msg("data follows end of stream"));
+                } else {
+                    break;
+                }
+            }
+
             stdout
                 .write_all(&message)
                 .context("write crypttext to stdout")?;
@@ -124,7 +170,7 @@ fn read_record(stdin: &mut std::io::StdinLock, dest: &mut Vec<u8>) -> anyhow::Re
 
 fn main() {
     if let Err(e) = fmain() {
-        eprintln!("{}", &e);
+        eprintln!("error: {}", &e);
         std::process::exit(-1);
     }
 }
