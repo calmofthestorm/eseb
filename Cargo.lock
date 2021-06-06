@@ -40,9 +40,9 @@ checksum = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
 
 [[package]]
 name = "build_stamp"
-version = "1.0.0"
+version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6eaf40204a34d38b9d8ffd210336aafe621c12a6e984e30a43b4a89fe941daa6"
+checksum = "6294ae763e2f9c9f9b85bfaa182896b3e2cb04889c3bc7a6361817bb7cf31b2c"
 
 [[package]]
 name = "cc"
@@ -73,7 +73,7 @@ checksum = "338089f42c427b86394a5ee60ff321da23a5c89c9d89514c829687b26359fcff"
 
 [[package]]
 name = "eseb"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "base64",
