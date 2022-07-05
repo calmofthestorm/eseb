@@ -1,4 +1,4 @@
-use anyhow::{Context, Error, Result};
+use anyhow::Result;
 use snow::Builder;
 use sodiumoxide::randombytes::randombytes;
 
@@ -61,8 +61,12 @@ impl SnowKeyPair {
         })
     }
 
-    pub fn public(&self) -> &SnowPublicKey {
+    pub fn to_public(&self) -> &SnowPublicKey {
         return &self.public;
+    }
+
+    pub fn into_public(self) -> SnowPublicKey {
+        return self.public;
     }
 }
 
@@ -117,6 +121,6 @@ mod tests {
 
         assert_eq!(keypair.key_bytes(), deser_keypair.key_bytes());
         assert_eq!(public_key.key_bytes(), deser_pub.key_bytes());
-        assert_eq!(keypair.public().key_bytes(), deser_pub.key_bytes());
+        assert_eq!(keypair.to_public().key_bytes(), deser_pub.key_bytes());
     }
 }

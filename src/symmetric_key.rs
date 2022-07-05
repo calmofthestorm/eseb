@@ -1,4 +1,4 @@
-use anyhow::{Context, Error, Result};
+use anyhow::{Error, Result};
 use sodiumoxide::crypto::secretstream;
 
 use crate::key_util::*;
