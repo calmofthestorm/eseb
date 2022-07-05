@@ -1,12 +1,16 @@
 use std::convert::TryInto;
 use std::io::{BufRead, Read, Write};
 
-mod keys;
+mod key_util;
+mod snow_key;
+mod symmetric_key;
 
 use anyhow::{Context, Error, Result};
 use clap::App;
-use keys::{KeyMaterial, SymmetricKey};
+use key_util::KeyMaterial;
+use snow_key::SnowKeyPair;
 use sodiumoxide::crypto::secretstream;
+use symmetric_key::SymmetricKey;
 
 include!(concat!(env!("OUT_DIR"), "/generated_stamp.rs"));
 
@@ -30,7 +34,10 @@ fn fmain() -> Result<()> {
                 .about("Decrypt and verify")
                 .arg_from_usage("-e, --symmetric=<KEY> 'Symmetric decryption using key/keyfile.'"),
         )
-        .subcommand(App::new("keygen").about("Decrypt/verify"))
+        .subcommand(App::new("keygen").about("Generate symmetric key")
+                    .arg_from_usage("--snow 'Generate Snow keypair'")
+                    .arg_from_usage("--symmetric 'Generate symmetric key'")
+        )
         .get_matches();
 
     if let Some(matches) = matches.subcommand_matches("encrypt") {
@@ -135,9 +142,15 @@ fn fmain() -> Result<()> {
                 .write_all(&message)
                 .context("write crypttext to stdout")?;
         }
-    } else if let Some(..) = matches.subcommand_matches("keygen") {
-        let key = SymmetricKey::gen_key();
-        println!("{}", &key.serialize_to_string());
+    } else if let Some(matches) = matches.subcommand_matches("keygen") {
+        if matches.is_present("snow") {
+            let key = SnowKeyPair::gen_key()?;
+            println!("{}", &key.serialize_to_string());
+            println!("{}", &key.public().serialize_to_string());
+        } else {
+            let key = SymmetricKey::gen_key()?;
+            println!("{}", &key.serialize_to_string());
+        }
     }
 
     Ok(())
