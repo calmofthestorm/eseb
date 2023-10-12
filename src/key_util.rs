@@ -18,19 +18,19 @@ pub trait KeyMaterial {
     }
 }
 
-fn append_serialized(v: &mut String, header: &str, key: &[u8]) {
+pub fn append_serialized(v: &mut String, header: &str, key: &[u8]) {
     let start = v.len();
     v.push_str(&header);
     v.push_str(&mut base64::encode(&key));
     crc_encode(v, start);
 }
 
-fn crc_encode(buf: &mut String, start: usize) {
+pub fn crc_encode(buf: &mut String, start: usize) {
     let crc = crc16::State::<crc16::ARC>::calculate(&buf.as_bytes()[start..]);
     write!(buf, "::{:#05}", crc).expect("error writing to string");
 }
 
-fn crc_decode<'a>(buf: &'a str, header: &str) -> Result<Vec<u8>> {
+pub fn crc_decode<'a>(buf: &'a str, header: &str) -> Result<Vec<u8>> {
     if buf.len() < 7 || buf[buf.len() - 7..buf.len() - 5] != *"::" {
         return Err(Error::msg(format!(
             "expected ::xxxxx trailing 5 digit crc16"

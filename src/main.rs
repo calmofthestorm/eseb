@@ -1,7 +1,8 @@
 use eseb::*;
 
 use anyhow::{Error, Result};
-use clap::App;
+use clap::{App, ArgMatches};
+use record_reader::Format;
 
 include!(concat!(env!("OUT_DIR"), "/generated_stamp.rs"));
 
@@ -18,11 +19,15 @@ fn fmain() -> Result<()> {
         .subcommand(
             App::new("encrypt")
                 .about("Encrypt and sign")
-                .arg_from_usage("-e, --symmetric=<KEY> 'Symmetric encryption using key/keyfile.'"),
+                .arg_from_usage("-e, --symmetric=<KEY> 'Symmetric encryption using key/keyfile.'")
+            .arg_from_usage("-l, --legacy 'Use legacy 32-bit record format.'")
+                .arg_from_usage("-c, --compress 'Compress'"),
         )
         .subcommand(
             App::new("decrypt")
                 .about("Decrypt and verify")
+                .arg_from_usage("-c, --compress 'Decompress'")
+                .arg_from_usage("-l, --legacy 'Use legacy 32-bit record format.'")
                 .arg_from_usage("-e, --symmetric=<KEY> 'Symmetric decryption using key/keyfile.'"),
         )
         .subcommand(App::new("keygen").about("Generate symmetric key")
@@ -37,6 +42,8 @@ fn fmain() -> Result<()> {
             &key,
             &mut std::io::stdin().lock(),
             &mut std::io::stdout().lock(),
+            matches.contains_id("compress"),
+            legacy_format(matches),
         )?;
     } else if let Some(matches) = matches.subcommand_matches("decrypt") {
         let key = load_key(matches.value_of("symmetric").expect("validate flags"))?;
@@ -44,6 +51,8 @@ fn fmain() -> Result<()> {
             &key,
             &mut std::io::stdin().lock(),
             &mut std::io::stdout().lock(),
+            matches.contains_id("compress"),
+            legacy_format(matches),
         )?;
     } else if let Some(matches) = matches.subcommand_matches("keygen") {
         if matches.is_present("snow") {
@@ -57,6 +66,14 @@ fn fmain() -> Result<()> {
     }
 
     Ok(())
+}
+
+fn legacy_format(matches: &ArgMatches) -> Format {
+    if matches.contains_id("legacy") {
+        Format::Record32
+    } else {
+        Format::Record
+    }
 }
 
 fn load_key(source: &str) -> Result<SymmetricKey> {

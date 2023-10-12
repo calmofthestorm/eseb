@@ -1,147 +1,94 @@
+mod deterministic;
+mod encrypted_record_writer;
+mod encrypting_writer;
 mod key_util;
-mod snow_key;
+mod opaque_key;
+mod snow;
 mod symmetric_key;
 
-pub use key_util::KeyMaterial;
-pub use snow_key::{SnowKeyPair, SnowPublicKey};
-pub use symmetric_key::SymmetricKey;
+pub use crate::deterministic::DeterministicEncryptionSymmetricKey256;
+pub use crate::encrypted_record_writer::{
+    DecryptingRecordReader, DecryptingRecordWriter, EncryptingRecordWriter,
+};
+pub use crate::encrypting_writer::{DecryptingReader, EncryptingWriter};
+pub use crate::key_util::KeyMaterial;
+pub use crate::opaque_key::OpaqueKey;
+pub use crate::snow::{SnowKeyPair, SnowPsk, SnowPublicKey};
+pub use crate::symmetric_key::SymmetricKey;
 
-use std::convert::TryInto;
+use anyhow::{Context, Result};
+use record_reader::{Format, RecordReader, RecordWriter};
 
-use anyhow::{Context, Error, Result};
-use sodiumoxide::crypto::secretstream;
-
-fn write_record<O: std::io::Write>(writer: &mut O, record: &[u8]) -> anyhow::Result<()> {
-    let len: u32 = record.len() as u32;
-    writer
-        .write_all(&len.to_be_bytes())
-        .context("record length")?;
-    writer.write_all(record).context("record")
-}
-
-fn read_record<I: std::io::Read>(reader: &mut I, dest: &mut Vec<u8>) -> anyhow::Result<()> {
-    dest.resize(4, 0);
-    let n = reader.read(&mut dest[..1]).context("read record length")?;
-    if n == 0 {
-        dest.clear();
-        return Ok(());
-    } else {
-        reader
-            .read_exact(&mut dest[1..])
-            .context("read record length")?;
-    }
-    let len = u32::from_be_bytes(dest[..4].try_into().unwrap());
-    dest.resize(len as usize, 0);
-    reader.read_exact(dest).context("read record")
-}
-
+/// `format` is the format of the underlying file. You almost certainly want
+/// `Record` or `Record32`.
 pub fn symmetric_decrypt_verify_file<I: std::io::Read, O: std::io::Write>(
     key: &SymmetricKey,
-    mut reader: I,
-    mut writer: O,
+    reader: I,
+    writer: O,
+    compress: bool,
+    format: Format,
 ) -> Result<()> {
-    let mut buf = Vec::default();
-    read_record(&mut reader, &mut buf).context("read header")?;
+    let writer = record_reader::IoRecordWriter::new(writer, Format::Chunk);
+    let mut decrypter =
+        encrypted_record_writer::DecryptingRecordWriter::new(writer, key.clone(), compress)?;
+    let mut reader = record_reader::IoRecordReader::from_read(reader, format, std::usize::MAX);
 
-    let header = secretstream::xchacha20poly1305::Header::from_slice(&buf)
-        .ok_or_else(|| Error::msg("parse encryption header"))?;
-
-    let mut stream = secretstream::xchacha20poly1305::Stream::init_pull(&header, key.as_ref())
-        .map_err(|_| Error::msg("init_pull secret stream"))?;
-
-    // IDT we actually need these but it's easier this way.
-    read_record(&mut reader, &mut buf).context("read header")?;
-
-    if stream.is_finalized() {
-        return Err(Error::msg("decrypt stream finalized earlier than expected"));
+    while let Some(rec) = reader.maybe_read_record().context("read record")? {
+        decrypter
+            .write_record(&rec)
+            .context("decrypt and write record")?;
     }
 
-    let (message, tag) = stream
-        .pull(&buf, None)
-        .map_err(|_| Error::msg("secret stream pull"))?;
-
-    if tag != secretstream::Tag::Message {
-        return Err(Error::msg("incorrect tag"));
-    }
-
-    if !message.is_empty() {
-        return Err(Error::msg("initial message not empty"));
-    }
-
-    loop {
-        buf.clear();
-        read_record(&mut reader, &mut buf).context("read record")?;
-
-        let (message, tag) = stream
-            .pull(&buf, None)
-            .map_err(|_| Error::msg("secret stream pull"))?;
-
-        if stream.is_finalized() != (tag == secretstream::Tag::Final) {
-            return Err(Error::msg("tag final mismatch"));
-        }
-
-        if stream.is_finalized() {
-            read_record(&mut reader, &mut buf).context("read record")?;
-            if !buf.is_empty() {
-                return Err(Error::msg("data follows end of stream"));
-            } else {
-                return Ok(());
-            }
-        }
-
-        writer.write_all(&message).context("write crypttext")?;
-    }
-}
-
-pub fn symmetric_encrypt_sign_file<I: std::io::BufRead, O: std::io::Write>(
-    key: &SymmetricKey,
-    mut reader: I,
-    mut writer: O,
-) -> Result<()> {
-    let (mut stream, header) = secretstream::xchacha20poly1305::Stream::init_push(key.as_ref())
-        .map_err(|_| Error::msg("init_push secret stream"))?;
-
-    write_record(&mut writer, header.as_ref()).context("write header")?;
-
-    // Probably not necessary but should be sufficient.
-    let message = stream
-        .push(b"", None, secretstream::Tag::Message)
-        .map_err(|_| Error::msg("secret stream push initial"))?;
-    write_record(&mut writer, &message).context("write initial crypttext")?;
-
-    loop {
-        let data = reader.fill_buf().context("read cleartext")?;
-        let n = data.len();
-
-        if n == 0 {
-            break;
-        }
-
-        let message = stream
-            .push(data, None, secretstream::Tag::Push)
-            .map_err(|_| Error::msg("secret stream push"))?;
-        write_record(&mut writer, &message).context("write crypttext")?;
-
-        reader.consume(n);
-    }
-
-    let message = stream
-        .push(b"", None, secretstream::Tag::Final)
-        .map_err(|_| Error::msg("secret stream push final"))?;
-    write_record(&mut writer, &message).context("write initial crypttext")?;
+    decrypter.into_inner()?.into_inner().flush()?;
 
     Ok(())
 }
 
-pub fn symmetric_decrypt_verify(key: &SymmetricKey, ciphertext: &[u8]) -> Result<Vec<u8>> {
+/// `format` is the format of the underlying file. You almost certainly want
+/// `Record` or `Record32`.
+pub fn symmetric_encrypt_sign_file<I: std::io::BufRead, O: std::io::Write>(
+    key: &SymmetricKey,
+    reader: I,
+    writer: O,
+    compress: bool,
+    format: Format,
+) -> Result<()> {
+    let writer = record_reader::IoRecordWriter::new(writer, format);
+    let mut encrypter =
+        encrypted_record_writer::EncryptingRecordWriter::new(writer, key.clone(), compress)?;
+    let mut reader =
+        record_reader::IoRecordReader::from_read(reader, Format::Chunk, std::usize::MAX);
+
+    while let Some(rec) = reader.maybe_read_record().context("read record")? {
+        encrypter
+            .write_record(&rec)
+            .context("encrypt and write record")?;
+    }
+
+    encrypter.into_inner()?.into_inner().flush()?;
+
+    Ok(())
+}
+
+pub fn symmetric_decrypt_verify(
+    key: &SymmetricKey,
+    ciphertext: &[u8],
+    compress: bool,
+    format: Format,
+) -> Result<Vec<u8>> {
     let mut writer = Vec::default();
-    symmetric_decrypt_verify_file(key, ciphertext, &mut writer)?;
+    symmetric_decrypt_verify_file(key, ciphertext, &mut writer, compress, format)?;
     Ok(writer)
 }
 
-pub fn symmetric_encrypt_sign(key: &SymmetricKey, ciphertext: &[u8]) -> Result<Vec<u8>> {
+pub fn symmetric_encrypt_sign(
+    key: &SymmetricKey,
+    cleartext: &[u8],
+    compress: bool,
+    format: Format,
+) -> Result<Vec<u8>> {
     let mut writer = Vec::default();
-    symmetric_encrypt_sign_file(key, ciphertext, &mut writer)?;
+    symmetric_encrypt_sign_file(key, cleartext, &mut writer, compress, format)?;
     Ok(writer)
 }
 
@@ -149,21 +96,57 @@ pub fn symmetric_encrypt_sign(key: &SymmetricKey, ciphertext: &[u8]) -> Result<V
 mod tests {
     use super::*;
 
+    use std::str::FromStr;
+
+    #[test]
+    fn test_vectored() {
+        let cleartext = b"my cool text is here";
+        let key = SymmetricKey::from_str(
+            "eseb0::sym::/lt9yVsxQPo61czskdm+noia18Qh5DYBaFZoFKMa/xA=::20332",
+        )
+        .unwrap();
+        let ciphertext = [
+            0, 0, 0, 24, 239, 168, 91, 213, 56, 92, 221, 57, 187, 59, 182, 195, 3, 23, 249, 110,
+            169, 228, 140, 230, 45, 249, 245, 124, 0, 0, 0, 17, 2, 141, 26, 168, 146, 159, 230,
+            180, 240, 191, 101, 219, 116, 27, 236, 55, 214, 0, 0, 0, 37, 246, 225, 40, 142, 131,
+            231, 184, 45, 193, 238, 190, 170, 218, 197, 86, 219, 244, 100, 25, 185, 88, 245, 229,
+            34, 189, 66, 216, 156, 241, 71, 137, 233, 44, 38, 210, 192, 16, 0, 0, 0, 17, 117, 152,
+            71, 171, 96, 118, 226, 6, 103, 30, 208, 253, 129, 92, 35, 102, 208,
+        ];
+        let decrypted = symmetric_decrypt_verify(
+            &key,
+            &ciphertext,
+            /*compress=*/ false,
+            Format::Record32,
+        )
+        .unwrap();
+        assert_eq!(decrypted, cleartext);
+    }
+
     #[test]
     fn test_symmetric_encryption_and_signing() {
-        let key1 = SymmetricKey::gen_key().unwrap();
-        let key2 = SymmetricKey::gen_key().unwrap();
-        let cleartext = b"my cool text is here";
-        let ciphertext = symmetric_encrypt_sign(&key1, cleartext).unwrap();
+        for compress in &[false, true] {
+            let key1 = SymmetricKey::gen_key().unwrap();
+            let key2 = SymmetricKey::gen_key().unwrap();
+            let cleartext = b"my cool text is here";
+            let ciphertext =
+                symmetric_encrypt_sign(&key1, cleartext, *compress, Format::Record32).unwrap();
 
-        assert!(symmetric_decrypt_verify(&key2, &ciphertext).is_err());
+            assert!(
+                symmetric_decrypt_verify(&key2, &ciphertext, *compress, Format::Record32).is_err()
+            );
 
-        let decrypted = symmetric_decrypt_verify(&key1, &ciphertext).unwrap();
+            let decrypted =
+                symmetric_decrypt_verify(&key1, &ciphertext, *compress, Format::Record32).unwrap();
 
-        assert_eq!(decrypted, cleartext);
+            assert_eq!(decrypted, cleartext);
 
-        let mut ciphertext_bad = ciphertext.clone();
-        ciphertext_bad.push(73);
-        assert!(symmetric_decrypt_verify(&key1, &ciphertext_bad).is_err());
+            let mut ciphertext_bad = ciphertext.clone();
+            ciphertext_bad.push(73);
+            assert!(
+                symmetric_decrypt_verify(&key1, &ciphertext_bad, *compress, Format::Record32)
+                    .is_err()
+            );
+        }
     }
 }

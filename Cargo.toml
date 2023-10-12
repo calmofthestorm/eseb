@@ -2,20 +2,27 @@
 
 [package]
 name = "eseb"
-version = "0.1.2"
+version = "1.1.0"
 authors = ["Alex Roper <alex@aroper.net>"]
-edition = "2018"
-description = "Simple symmetric encryption binary using NaCl."
+edition = "2021"
+description = "Simple symmetric encryption binary using NaCl and Snow."
 license = "Apache-2.0"
 
 [dependencies]
-anyhow = "1"
-base64 = "0"
-build_stamp = "1.0.2"
-clap = "2.33.0"
-crc16 = "0"
-snow = "0.9.0"
-sodiumoxide = "0.2.5"
+aes = "0.8"
+anyhow = "1.0"
+base64 = "0.13"
+brotli = "3.3"
+build_stamp = "1.0"
+clap = "3.2"
+crc16 = "0.4"
+generic-array = "0.14"
+record_reader = { version = "1.0", git = "https://github.com/calmofthestorm/record_reader.git", features = [] }
+snow = "0.9"
+sodiumoxide = "0.2"
 
 [build-dependencies]
-build_stamp = "1.0.2"
+build_stamp = "1.0"
+
+[dev-dependencies]
+hex = "0.4"
