@@ -9,6 +9,8 @@ pub struct SnowPsk {
     data: Vec<u8>,
 }
 
+crate::serde_support::derive_serde!(SnowPsk, SnowPskVisitor);
+
 impl std::str::FromStr for SnowPsk {
     type Err = anyhow::Error;
     fn from_str(data: &str) -> Result<SnowPsk> {
@@ -67,5 +69,14 @@ mod test {
         assert_eq!(deser_key.key(), key.key());
 
         assert!(SnowPsk::new(b"hh".to_vec()).is_err());
+    }
+
+    #[test]
+    fn test_serde() {
+        let key = crate::SnowKeyPair::gen_key().unwrap().into_psk();
+        let ser_key = bincode::serialize(&key).unwrap();
+        assert!(!ser_key.is_empty());
+        let deser_key: SnowPsk = bincode::deserialize(&ser_key).unwrap();
+        assert_eq!(deser_key.key_bytes(), key.key_bytes());
     }
 }

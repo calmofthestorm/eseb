@@ -12,6 +12,8 @@ pub struct SnowKeyPair {
     psk: SnowPsk,
 }
 
+crate::serde_support::derive_serde!(SnowKeyPair, SnowKeyPairVisitor);
+
 impl std::str::FromStr for SnowKeyPair {
     type Err = anyhow::Error;
     fn from_str(data: &str) -> Result<SnowKeyPair> {
@@ -130,4 +132,6 @@ mod tests {
         assert_eq!(public_key.key_bytes(), deser_pub.key_bytes());
         assert_eq!(keypair.to_public().key_bytes(), deser_pub.key_bytes());
     }
+
+    crate::serde_support::test_derive_serde!(SnowKeyPair);
 }

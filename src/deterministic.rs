@@ -14,15 +14,24 @@ use crate::key_util::*;
 /// deterministic):
 /// https://en.wikipedia.org/wiki/Deterministic_encryption#Security
 ///
-/// Not for use in applications that require non-deterministic encryption.
+/// Not for use in applications that require non-deterministic encryption, nor
+/// in applications where deterministic encryption would be inappropriate. We
+/// recommend that you discuss your cryptographic situation with a licensed
+/// cryptographic counselor before proceeding.
 ///
 /// Basically, see this picture:
 /// https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation#/media/File:Tux_ECB.png
+#[derive(Clone)]
 pub struct DeterministicEncryptionSymmetricKey256 {
     aes_key: [u8; 32],
     aes: Aes256,
     iv: [u8; 16],
 }
+
+crate::serde_support::derive_serde!(
+    DeterministicEncryptionSymmetricKey256,
+    DeterministicEncryptionSymmetricKey256Visitor
+);
 
 impl KeyMaterial for DeterministicEncryptionSymmetricKey256 {
     const HEADER: &'static str = "eseb1::deterministic_aes256_ecb::";
@@ -129,4 +138,38 @@ mod tests {
         assert_eq!(crypttext[..16], crypttext[16..]);
         assert_eq!(cleartext, key.decrypt(crypttext));
     }
+
+    crate::serde_support::test_derive_serde!(DeterministicEncryptionSymmetricKey256);
+
+    // extern crate test;
+
+    // #[bench]
+    // fn aes(bench: &mut test::Bencher) {
+    //     rayon::scope(|_| 5);
+    //     let key1 = crate::SymmetricKey::gen_key().unwrap();
+    //     let key2 = key1.clone();
+    //     bench.iter(|| {
+    //         let result = rayon::join(|| {
+
+    //             let data = [255; 8192 * 640];
+    //             let mut crypt_writer = crate::EncryptingWriter::new(
+    //                 record_reader::BufferRecordWriter::new(record_reader::Format::Record32),
+    //                 key1.clone(),
+    //                 /*compress=*/ false,
+    //             )
+    //                 .unwrap();
+    //         }, || {
+
+    //             let data = [7; 8192 * 640];
+    //             let mut crypt_writer = crate::EncryptingWriter::new(
+    //                 record_reader::BufferRecordWriter::new(record_reader::Format::Record32),
+    //                 key2.clone(),
+    //                 /*compress=*/ false,
+    //             )
+    //                 .unwrap();
+    //         });
+    //         result
+    //     });
+
+    // }
 }

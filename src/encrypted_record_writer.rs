@@ -235,33 +235,33 @@ impl<O: RecordWriter> Drop for EncryptingRecordWriter<O> {
     }
 }
 
+enum DecryptingRecordReaderState {
+    PreInit,
+    Init(secretstream::Stream<secretstream::Pull>),
+    Closed,
+}
+
 pub struct DecryptingRecordReader<I: RecordReader> {
     inner: I,
-    stream: Option<secretstream::Stream<secretstream::Pull>>,
+    key: SymmetricKey,
+    stream: DecryptingRecordReaderState,
     compress: bool,
     buf: Vec<u8>,
 }
 
+impl Default for DecryptingRecordReaderState {
+    fn default() -> DecryptingRecordReaderState {
+        DecryptingRecordReaderState::PreInit
+    }
+}
+
 impl<I: RecordReader> DecryptingRecordReader<I> {
-    pub fn new(
-        mut inner: I,
-        key: SymmetricKey,
-        compress: bool,
-    ) -> Result<DecryptingRecordReader<I>> {
-        let data = inner.read_record().context("read header")?;
-        let header = secretstream::xchacha20poly1305::Header::from_slice(&data)
-            .context("parse stream header")?;
-
-        let stream = Some(
-            secretstream::Stream::init_pull(&header, key.as_ref())
-                .ok()
-                .context("NaCl init_pull")?,
-        );
-
+    pub fn new(inner: I, key: SymmetricKey, compress: bool) -> Result<DecryptingRecordReader<I>> {
         Ok(DecryptingRecordReader {
             inner,
-            stream,
+            stream: DecryptingRecordReaderState::PreInit,
             compress,
+            key,
             buf: Vec::default(),
         })
     }
@@ -301,13 +301,30 @@ impl<I: RecordReader> DecryptingRecordReader<I> {
 
         Ok((None, Vec::default()))
     }
+
+    fn take_stream(&mut self) -> Result<Option<secretstream::Stream<secretstream::Pull>>> {
+        match std::mem::take(&mut self.stream) {
+            DecryptingRecordReaderState::PreInit => {
+                let data = self.inner.read_record().context("read header")?;
+                let header = secretstream::xchacha20poly1305::Header::from_slice(&data)
+                    .context("parse stream header")?;
+
+                let stream = secretstream::Stream::init_pull(&header, self.key.as_ref())
+                    .ok()
+                    .context("NaCl init_pull")?;
+                Ok(Some(stream))
+            }
+            DecryptingRecordReaderState::Closed => Ok(None),
+            DecryptingRecordReaderState::Init(stream) => Ok(Some(stream)),
+        }
+    }
 }
 
 impl<I: RecordReader> RecordReader for DecryptingRecordReader<I> {
     fn maybe_read_record<'a>(&'a mut self) -> Result<Option<&'a [u8]>> {
-        let stream = match self.stream.take() {
-            None => return Ok(None),
+        let stream = match self.take_stream()? {
             Some(stream) => stream,
+            None => return Ok(None),
         };
 
         if stream.is_finalized() {
@@ -317,13 +334,18 @@ impl<I: RecordReader> RecordReader for DecryptingRecordReader<I> {
         let (stream, mut cleartext) =
             Self::maybe_read_record_internal(stream, &mut self.inner, &mut self.buf)?;
 
-        self.stream = stream;
+        self.stream = match stream {
+            Some(stream) => DecryptingRecordReaderState::Init(stream),
+            None => DecryptingRecordReaderState::Closed,
+        };
 
         if self.buf.is_empty() && cleartext.is_empty() {
-            if self.stream.is_some() {
-                Ok(Some(b""))
-            } else {
-                Ok(None)
+            match std::mem::take(&mut self.stream) {
+                DecryptingRecordReaderState::PreInit => {
+                    unreachable!()
+                }
+                DecryptingRecordReaderState::Closed => Ok(None),
+                DecryptingRecordReaderState::Init(_stream) => Ok(Some(b"")),
             }
         } else {
             if !self.buf.is_empty() && !cleartext.is_empty() {

@@ -10,6 +10,8 @@ pub struct SnowPublicKey {
     key: Vec<u8>,
 }
 
+crate::serde_support::derive_serde!(SnowPublicKey, SnowPublicKeyVisitor);
+
 impl std::str::FromStr for SnowPublicKey {
     type Err = anyhow::Error;
     fn from_str(data: &str) -> Result<SnowPublicKey> {
@@ -33,5 +35,19 @@ impl KeyMaterial for SnowPublicKey {
     const HEADER: &'static str = "eseb1::snow_public_key::";
     fn key_bytes(&self) -> Vec<u8> {
         self.key.clone()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_serde() {
+        let key = crate::SnowKeyPair::gen_key().unwrap().into_public();
+        let ser_key = bincode::serialize(&key).unwrap();
+        assert!(!ser_key.is_empty());
+        let deser_key: SnowPublicKey = bincode::deserialize(&ser_key).unwrap();
+        assert_eq!(deser_key.key_bytes(), key.key_bytes());
     }
 }

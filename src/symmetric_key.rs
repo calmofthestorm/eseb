@@ -8,6 +8,8 @@ pub struct SymmetricKey {
     key: secretstream::xchacha20poly1305::Key,
 }
 
+crate::serde_support::derive_serde!(SymmetricKey, SymmetricKeyVisitor);
+
 impl std::str::FromStr for SymmetricKey {
     type Err = anyhow::Error;
     fn from_str(data: &str) -> Result<SymmetricKey> {
@@ -53,4 +55,6 @@ mod tests {
         let deser_key = SymmetricKey::from_str(&ser_key).unwrap();
         assert_eq!(deser_key.key_bytes(), key.key_bytes());
     }
+
+    crate::serde_support::test_derive_serde!(SymmetricKey);
 }

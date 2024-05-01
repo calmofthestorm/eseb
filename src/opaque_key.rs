@@ -9,6 +9,8 @@ pub struct OpaqueKey {
     data: Vec<u8>,
 }
 
+crate::serde_support::derive_serde!(OpaqueKey, OpaqueKeyVisitor);
+
 impl std::str::FromStr for OpaqueKey {
     type Err = anyhow::Error;
     fn from_str(data: &str) -> Result<OpaqueKey> {
@@ -59,5 +61,14 @@ mod test {
         assert!(!ser_key.is_empty());
         let deser_key = OpaqueKey::from_str(&ser_key).unwrap();
         assert_eq!(deser_key.key(), key.key());
+    }
+
+    #[test]
+    fn test_serde() {
+        let key = OpaqueKey::new(b"foo".to_vec());
+        let ser_key = bincode::serialize(&key).unwrap();
+        assert!(!ser_key.is_empty());
+        let deser_key: OpaqueKey = bincode::deserialize(&ser_key).unwrap();
+        assert_eq!(deser_key.key_bytes(), key.key_bytes());
     }
 }

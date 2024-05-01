@@ -7,6 +7,8 @@ pub struct SnowPrivateKey {
     key: Vec<u8>,
 }
 
+crate::serde_support::derive_serde!(SnowPrivateKey, SnowPrivateKeyVisitor);
+
 impl std::str::FromStr for SnowPrivateKey {
     type Err = anyhow::Error;
     fn from_str(data: &str) -> Result<SnowPrivateKey> {
@@ -30,5 +32,19 @@ impl KeyMaterial for SnowPrivateKey {
     const HEADER: &'static str = "eseb1::snow_private_key::";
     fn key_bytes(&self) -> Vec<u8> {
         self.key.clone()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_serde() {
+        let key = crate::SnowKeyPair::gen_key().unwrap().into_private();
+        let ser_key = bincode::serialize(&key).unwrap();
+        assert!(!ser_key.is_empty());
+        let deser_key: SnowPrivateKey = bincode::deserialize(&ser_key).unwrap();
+        assert_eq!(deser_key.key_bytes(), key.key_bytes());
     }
 }

@@ -3,6 +3,7 @@ mod encrypted_record_writer;
 mod encrypting_writer;
 mod key_util;
 mod opaque_key;
+mod serde_support;
 mod snow;
 mod symmetric_key;
 
