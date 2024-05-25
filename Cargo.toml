@@ -2,7 +2,7 @@
 
 [package]
 name = "eseb"
-version = "1.1.0"
+version = "1.1.5"
 authors = ["Alex Roper <alex@aroper.net>"]
 edition = "2021"
 description = "Simple symmetric encryption binary using NaCl and Snow."
@@ -19,7 +19,6 @@ blake2 = "0.10"
 tokio-util = {version = "0.7", features=["compat"]}
 rayon = "1.7"
 tokio = {version = "1.21", features=["full", "io-util"]}
-rollsum = { path = "../apocyan/rollsum" }
 sha1 = "0.10"
 crc32c = "0.6"
 crc16 = "0.4"
