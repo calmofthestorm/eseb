@@ -20,7 +20,24 @@ use crate::key_util::*;
 /// cryptographic counselor before proceeding.
 ///
 /// Basically, see this picture:
-/// https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation#/media/File:Tux_ECB.png
+/// https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation#/media/File:Tux_encrypted_ecb.png
+///
+/// In addition to the above problem shared by all deterministic encryption,
+/// this implementation additionally leaks information by virtue of the two
+/// blocks being encrypted independently -- a bit flip in the first half will
+/// not satisfy the "avalanche" requirement -- only the first half will change.
+/// It also does not provide any authentication/integrity.
+///
+/// This is intended for a very specific purpose where the inputs are
+/// cryptographic hash functions. They are therefore uniformly distributed and
+/// provide the necessary "avalanche" relative to their input.
+///
+/// AES-SIV would be a better choice for general purpose deterministic
+/// encryption, or FFX/EME to keep the same length. At some point, some
+/// AI-powered vulnerability scanner is going to flag this and start sending
+/// increasingly threatening letters to my neighbors, at which point I'll
+/// probably give in and switch, like how I did for non-cryptographic
+/// applications of MD5.
 #[derive(Clone)]
 pub struct DeterministicEncryptionSymmetricKey256 {
     aes_key: [u8; 32],
@@ -56,25 +73,32 @@ impl DeterministicEncryptionSymmetricKey256 {
         Self::from_slice(&sodiumoxide::randombytes::randombytes(48))
     }
 
-    pub fn encrypt(&self, mut cleartext: GenericArray<u8, U32>) -> GenericArray<u8, U32> {
+    pub fn encrypt<B>(&self, cleartext: B) -> [u8; 32]
+    where
+        B: Into<GenericArray<u8, U32>>,
+    {
+        let mut cleartext = cleartext.into();
         for j in 0..16 {
             cleartext[j] ^= self.iv[j];
         }
         let (block1, block2) = cleartext.split();
         let mut blocks = [block1, block2];
         self.aes.encrypt_blocks(&mut blocks);
-        GenericArray::from_exact_iter(blocks.into_iter().flatten()).unwrap()
+        GenericArray::from_exact_iter(blocks.into_iter().flatten()).unwrap().into()
     }
 
-    pub fn decrypt(&self, crypttext: GenericArray<u8, U32>) -> GenericArray<u8, U32> {
-        let (block1, block2) = crypttext.split();
+    pub fn decrypt<B>(&self, crypttext: B) -> [u8; 32]
+    where
+        B: Into<GenericArray<u8, U32>>,
+    {
+        let (block1, block2) = crypttext.into().split();
         let mut blocks = [block1, block2];
         self.aes.decrypt_blocks(&mut blocks);
         let mut cleartext = GenericArray::from_exact_iter(blocks.into_iter().flatten()).unwrap();
         for j in 0..16 {
             cleartext[j] ^= self.iv[j];
         }
-        cleartext
+        cleartext.into()
     }
 
     fn from_slice(slice: &[u8]) -> Result<DeterministicEncryptionSymmetricKey256> {
