@@ -21,7 +21,7 @@ crc16 = "0.4"
 generic-array = "0.14"
 record_reader = { version = "1.1", git = "https://github.com/calmofthestorm/record_reader.git", features = [] }
 serde = { version = "1.0", default-features = false, features = [ "derive", "std", "alloc" ] }
-snow = "0.9"
+snow = "0.10"
 sodiumoxide = "0.2"
 
 [build-dependencies]
