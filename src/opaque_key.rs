@@ -65,10 +65,12 @@ mod test {
 
     #[test]
     fn test_serde() {
+        let config = bincode::config::legacy();
         let key = OpaqueKey::new(b"foo".to_vec());
-        let ser_key = bincode::serialize(&key).unwrap();
+        let ser_key = bincode::encode_to_vec(&key, config).unwrap();
         assert!(!ser_key.is_empty());
-        let deser_key: OpaqueKey = bincode::deserialize(&ser_key).unwrap();
+        let (deser_key, _): (OpaqueKey, usize) =
+            bincode::decode_from_slice(&ser_key, config).unwrap();
         assert_eq!(deser_key.key_bytes(), key.key_bytes());
     }
 }

@@ -256,4 +256,65 @@ mod tests {
     fn test_empty() {
         empty_test(/*compress=*/ false);
     }
+
+    #[test]
+    fn test_decrypting_reader_rejects_corrupt_chunk() {
+        let key = SymmetricKey::gen_key().unwrap();
+        let mut crypt_writer = EncryptingWriter::new(
+            BufferRecordWriter::new(Format::Record32),
+            key.clone(),
+            /*compress=*/ false,
+        )
+        .unwrap();
+
+        crypt_writer.write_all(b"this is halloween").unwrap();
+
+        let ciphertext = crypt_writer.into_inner().unwrap().into_cow();
+        let mut cipher_reader =
+            BufferRecordReader::new(ciphertext, Format::Record32, std::u32::MAX as usize);
+        let mut records: Vec<Vec<u8>> = Vec::new();
+        while let Some(rec) = cipher_reader.maybe_read_record().unwrap() {
+            records.push(rec.to_vec());
+        }
+
+        assert!(records.len() >= 2);
+        records[1][0] ^= 0x01;
+
+        let mut corrupted = BufferRecordWriter::new(Format::Record32);
+        for rec in records {
+            corrupted.write_record(&rec).unwrap();
+        }
+
+        let mut crypt_reader = DecryptingReader::new(
+            BufferRecordReader::new(corrupted.into_cow(), Format::Record32, usize::MAX),
+            key,
+            /*compress=*/ false,
+        )
+        .unwrap();
+
+        let mut buf = [0 as u8; 16];
+        let err = crypt_reader.read(&mut buf).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("decrypt chunk"));
+    }
+
+    #[test]
+    fn test_decrypting_reader_rejects_bad_header() {
+        let key = SymmetricKey::gen_key().unwrap();
+        let mut cipher_writer = BufferRecordWriter::new(Format::Record32);
+        cipher_writer.write_record(b"bad").unwrap();
+        let result = DecryptingReader::new(
+            BufferRecordReader::new(cipher_writer.into_cow(), Format::Record32, usize::MAX),
+            key,
+            /*compress=*/ false,
+        );
+
+        match result {
+            Ok(_) => panic!("expected bad header to fail"),
+            Err(err) => {
+                let msg = err.to_string();
+                assert!(msg.contains("parse stream header"));
+            }
+        }
+    }
 }

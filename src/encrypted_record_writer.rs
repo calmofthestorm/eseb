@@ -38,8 +38,7 @@ impl<O: RecordWriter> DecryptingRecordWriter<O> {
     }
 
     fn into_inner_internal(&mut self) -> Result<()> {
-        let (ref mut writer, _state, ref mut buf) =
-            self.inner.as_mut().context("already called finish")?;
+        let (writer, _state, buf) = self.inner.as_mut().context("already called finish")?;
         if !buf.is_empty() {
             Self::write_internal(writer, buf, Vec::default(), self.compress)
                 .expect("write final chunk at into_inner");
@@ -548,5 +547,152 @@ mod tests {
         chunk_test(vec![b"in the", b"", b""]);
         chunk_test(vec![b"", b"dead of ", b""]);
         chunk_test(vec![b"", b"", b" night "]);
+    }
+
+    #[test]
+    fn test_decrypting_writer_rejects_after_finish() {
+        const COMPRESS: bool = false;
+
+        let key = SymmetricKey::gen_key().unwrap();
+        let mut crypt_writer = EncryptingRecordWriter::new(
+            BufferRecordWriter::new(Format::Record32),
+            key.clone(),
+            COMPRESS,
+        )
+        .unwrap();
+        crypt_writer.write_record(b"this is halloween").unwrap();
+
+        let ciphertext = crypt_writer.into_inner().unwrap().into_cow();
+        let mut cipher_reader =
+            BufferRecordReader::new(ciphertext, Format::Record32, std::u32::MAX as usize);
+        let mut clear_writer =
+            DecryptingRecordWriter::new(BufferRecordWriter::new(Format::Record32), key, COMPRESS)
+                .unwrap();
+
+        while let Some(rec) = cipher_reader.maybe_read_record().unwrap() {
+            clear_writer.write_record(&rec).unwrap();
+        }
+
+        let err = clear_writer.write_record(b"extra data").unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("write_record called after finished"));
+    }
+
+    #[test]
+    fn test_decrypting_writer_rejects_corrupt_chunk() {
+        const COMPRESS: bool = false;
+
+        let key = SymmetricKey::gen_key().unwrap();
+        let mut crypt_writer = EncryptingRecordWriter::new(
+            BufferRecordWriter::new(Format::Record32),
+            key.clone(),
+            COMPRESS,
+        )
+        .unwrap();
+        crypt_writer.write_record(b"this is halloween").unwrap();
+
+        let ciphertext = crypt_writer.into_inner().unwrap().into_cow();
+        let mut cipher_reader =
+            BufferRecordReader::new(ciphertext, Format::Record32, std::u32::MAX as usize);
+        let mut clear_writer =
+            DecryptingRecordWriter::new(BufferRecordWriter::new(Format::Record32), key, COMPRESS)
+                .unwrap();
+
+        let header = cipher_reader.maybe_read_record().unwrap().unwrap().to_vec();
+        clear_writer.write_record(&header).unwrap();
+
+        let mut data = cipher_reader.maybe_read_record().unwrap().unwrap().to_vec();
+        data[0] ^= 0x01;
+        let err = clear_writer.write_record(&data).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("decrypt chunk"));
+    }
+
+    #[test]
+    fn test_decrypting_writer_rejects_rekey_tag() {
+        const COMPRESS: bool = false;
+
+        let key = SymmetricKey::gen_key().unwrap();
+        let (mut stream, header) = secretstream::Stream::init_push(key.as_ref()).unwrap();
+        let rekey_chunk = stream
+            .push(b"rekey", None, secretstream::Tag::Rekey)
+            .unwrap();
+
+        let mut cipher_writer = BufferRecordWriter::new(Format::Record32);
+        cipher_writer.write_record(header.as_ref()).unwrap();
+        cipher_writer.write_record(&rekey_chunk).unwrap();
+
+        let mut cipher_reader = BufferRecordReader::new(
+            cipher_writer.into_cow(),
+            Format::Record32,
+            std::u32::MAX as usize,
+        );
+        let mut clear_writer =
+            DecryptingRecordWriter::new(BufferRecordWriter::new(Format::Record32), key, COMPRESS)
+                .unwrap();
+
+        let header = cipher_reader.maybe_read_record().unwrap().unwrap().to_vec();
+        clear_writer.write_record(&header).unwrap();
+
+        let data = cipher_reader.maybe_read_record().unwrap().unwrap().to_vec();
+        let err = clear_writer.write_record(&data).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("Rekey"));
+    }
+
+    #[test]
+    fn test_decrypting_writer_rejects_bad_header() {
+        let key = SymmetricKey::gen_key().unwrap();
+        let mut clear_writer = DecryptingRecordWriter::new(
+            BufferRecordWriter::new(Format::Record32),
+            key,
+            /*compress=*/ false,
+        )
+        .unwrap();
+
+        let err = clear_writer.write_record(b"bad").unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("parse stream header"));
+    }
+
+    #[test]
+    fn test_decrypting_reader_rejects_rekey_tag() {
+        let key = SymmetricKey::gen_key().unwrap();
+        let (mut stream, header) = secretstream::Stream::init_push(key.as_ref()).unwrap();
+        let rekey_chunk = stream
+            .push(b"rekey", None, secretstream::Tag::Rekey)
+            .unwrap();
+
+        let mut cipher_writer = BufferRecordWriter::new(Format::Record32);
+        cipher_writer.write_record(header.as_ref()).unwrap();
+        cipher_writer.write_record(&rekey_chunk).unwrap();
+
+        let mut clear_reader = DecryptingRecordReader::new(
+            BufferRecordReader::new(cipher_writer.into_cow(), Format::Record32, usize::MAX),
+            key,
+            /*compress=*/ false,
+        )
+        .unwrap();
+
+        let err = clear_reader.maybe_read_record().unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("Rekey"));
+    }
+
+    #[test]
+    fn test_decrypting_reader_rejects_bad_header() {
+        let key = SymmetricKey::gen_key().unwrap();
+        let mut cipher_writer = BufferRecordWriter::new(Format::Record32);
+        cipher_writer.write_record(b"bad").unwrap();
+        let mut clear_reader = DecryptingRecordReader::new(
+            BufferRecordReader::new(cipher_writer.into_cow(), Format::Record32, usize::MAX),
+            key,
+            /*compress=*/ false,
+        )
+        .unwrap();
+
+        let err = clear_reader.maybe_read_record().unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("parse stream header"));
     }
 }

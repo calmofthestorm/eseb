@@ -1,3 +1,7 @@
 target
 *.~undo-tree~
 .*.sw*
+fuzz/target
+fuzz/artifacts
+fuzz/corpus
+fuzz/*.log

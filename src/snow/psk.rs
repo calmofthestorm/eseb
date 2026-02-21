@@ -2,7 +2,7 @@ use std::io::Read;
 
 use anyhow::Result;
 
-use crate::key_util::{parse_header, KeyMaterial};
+use crate::key_util::{KeyMaterial, parse_header};
 
 #[derive(Clone)]
 pub struct SnowPsk {
@@ -73,10 +73,12 @@ mod test {
 
     #[test]
     fn test_serde() {
+        let config = bincode::config::legacy();
         let key = crate::SnowKeyPair::gen_key().unwrap().into_psk();
-        let ser_key = bincode::serialize(&key).unwrap();
+        let ser_key = bincode::encode_to_vec(&key, config).unwrap();
         assert!(!ser_key.is_empty());
-        let deser_key: SnowPsk = bincode::deserialize(&ser_key).unwrap();
+        let (deser_key, _): (SnowPsk, usize) =
+            bincode::decode_from_slice(&ser_key, config).unwrap();
         assert_eq!(deser_key.key_bytes(), key.key_bytes());
     }
 }

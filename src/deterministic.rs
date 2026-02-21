@@ -1,9 +1,9 @@
 use aes::{
-    cipher::{BlockDecrypt, BlockEncrypt, KeyInit},
     Aes256,
+    cipher::{BlockDecrypt, BlockEncrypt, KeyInit},
 };
 use anyhow::Result;
-use generic_array::{sequence::Split, typenum::U32, GenericArray};
+use generic_array::{GenericArray, sequence::Split, typenum::U32};
 
 use crate::key_util::*;
 
@@ -84,7 +84,9 @@ impl DeterministicEncryptionSymmetricKey256 {
         let (block1, block2) = cleartext.split();
         let mut blocks = [block1, block2];
         self.aes.encrypt_blocks(&mut blocks);
-        GenericArray::from_exact_iter(blocks.into_iter().flatten()).unwrap().into()
+        GenericArray::from_exact_iter(blocks.into_iter().flatten())
+            .unwrap()
+            .into()
     }
 
     pub fn decrypt<B>(&self, crypttext: B) -> [u8; 32]
@@ -140,7 +142,7 @@ mod tests {
             hex::encode(crypttext),
             "4e154674cc7c4fa5db8fecb365f698085ccfdd74603bc96fa319b1f97959e574"
         );
-        assert_eq!(cleartext, key.decrypt(crypttext));
+        assert_eq!(cleartext, key.decrypt(crypttext).into());
     }
 
     /// Test that with an all-zero IV, and a key where the first 16 and second
@@ -155,45 +157,13 @@ mod tests {
 
         let crypttext = key.encrypt(cleartext);
         assert_ne!(crypttext[..16], crypttext[16..]);
-        assert_eq!(cleartext, key.decrypt(crypttext));
+        assert_eq!(cleartext, key.decrypt(crypttext).into());
 
         key.iv.fill(0);
         let crypttext = key.encrypt(cleartext);
         assert_eq!(crypttext[..16], crypttext[16..]);
-        assert_eq!(cleartext, key.decrypt(crypttext));
+        assert_eq!(cleartext, key.decrypt(crypttext).into());
     }
 
     crate::serde_support::test_derive_serde!(DeterministicEncryptionSymmetricKey256);
-
-    // extern crate test;
-
-    // #[bench]
-    // fn aes(bench: &mut test::Bencher) {
-    //     rayon::scope(|_| 5);
-    //     let key1 = crate::SymmetricKey::gen_key().unwrap();
-    //     let key2 = key1.clone();
-    //     bench.iter(|| {
-    //         let result = rayon::join(|| {
-
-    //             let data = [255; 8192 * 640];
-    //             let mut crypt_writer = crate::EncryptingWriter::new(
-    //                 record_reader::BufferRecordWriter::new(record_reader::Format::Record32),
-    //                 key1.clone(),
-    //                 /*compress=*/ false,
-    //             )
-    //                 .unwrap();
-    //         }, || {
-
-    //             let data = [7; 8192 * 640];
-    //             let mut crypt_writer = crate::EncryptingWriter::new(
-    //                 record_reader::BufferRecordWriter::new(record_reader::Format::Record32),
-    //                 key2.clone(),
-    //                 /*compress=*/ false,
-    //             )
-    //                 .unwrap();
-    //         });
-    //         result
-    //     });
-
-    // }
 }

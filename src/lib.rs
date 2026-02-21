@@ -13,6 +13,7 @@ pub use crate::encrypted_record_writer::{
 };
 pub use crate::encrypting_writer::{DecryptingReader, EncryptingWriter};
 pub use crate::key_util::KeyMaterial;
+pub use crate::key_util::{crc_decode, parse_header};
 pub use crate::opaque_key::OpaqueKey;
 pub use crate::snow::{SnowKeyPair, SnowPsk, SnowPublicKey};
 pub use crate::symmetric_key::SymmetricKey;

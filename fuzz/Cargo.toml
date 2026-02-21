@@ -1,0 +1,43 @@
+[package]
+name = "eseb-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+eseb = { path = ".." }
+record_reader = { version = "1.0", git = "https://github.com/calmofthestorm/record_reader.git", features = [] }
+
+[[bin]]
+name = "parse_header"
+path = "fuzz_targets/parse_header.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "decrypt_verify"
+path = "fuzz_targets/decrypt_verify.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "decrypt_record_reader"
+path = "fuzz_targets/decrypt_record_reader.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "decrypt_record_writer"
+path = "fuzz_targets/decrypt_record_writer.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "decrypt_stream_reader"
+path = "fuzz_targets/decrypt_stream_reader.rs"
+test = false
+doc = false
