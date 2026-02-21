@@ -37,7 +37,7 @@ pub fn symmetric_decrypt_verify_file<I: std::io::Read, O: std::io::Write>(
 
     while let Some(rec) = reader.maybe_read_record().context("read record")? {
         decrypter
-            .write_record(&rec)
+            .write_record(rec)
             .context("decrypt and write record")?;
     }
 
@@ -63,7 +63,7 @@ pub fn symmetric_encrypt_sign_file<I: std::io::BufRead, O: std::io::Write>(
 
     while let Some(rec) = reader.maybe_read_record().context("read record")? {
         encrypter
-            .write_record(&rec)
+            .write_record(rec)
             .context("encrypt and write record")?;
     }
 

@@ -63,7 +63,7 @@ impl KeyMaterial for DeterministicEncryptionSymmetricKey256 {
 impl std::str::FromStr for DeterministicEncryptionSymmetricKey256 {
     type Err = anyhow::Error;
     fn from_str(data: &str) -> Result<DeterministicEncryptionSymmetricKey256> {
-        let key_data = parse_header(data.trim(), &Self::HEADER)?;
+        let key_data = parse_header(data.trim(), Self::HEADER)?;
         Self::from_slice(&key_data)
     }
 }

@@ -12,7 +12,7 @@ crate::serde_support::derive_serde!(SnowPrivateKey, SnowPrivateKeyVisitor);
 impl std::str::FromStr for SnowPrivateKey {
     type Err = anyhow::Error;
     fn from_str(data: &str) -> Result<SnowPrivateKey> {
-        let key_data = parse_header(data.trim(), &Self::HEADER)?;
+        let key_data = parse_header(data.trim(), Self::HEADER)?;
         assert_eq!(key_data.len(), 32);
         Ok(SnowPrivateKey { key: key_data })
     }

@@ -13,7 +13,7 @@ crate::serde_support::derive_serde!(SymmetricKey, SymmetricKeyVisitor);
 impl std::str::FromStr for SymmetricKey {
     type Err = anyhow::Error;
     fn from_str(data: &str) -> Result<SymmetricKey> {
-        let key_data = parse_header(data.trim(), &Self::HEADER)?;
+        let key_data = parse_header(data.trim(), Self::HEADER)?;
         let key = secretstream::xchacha20poly1305::Key::from_slice(&key_data)
             .ok_or_else(|| Error::msg("sodiumoxide returned error attempting to parse the key"))?;
         Ok(SymmetricKey { key })

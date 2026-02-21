@@ -14,14 +14,14 @@ pub trait KeyMaterial {
     }
 
     fn append_serialized(&self, v: &mut String) {
-        append_serialized(v, &Self::HEADER, &self.key_bytes());
+        append_serialized(v, Self::HEADER, &self.key_bytes());
     }
 }
 
 pub fn append_serialized(v: &mut String, header: &str, key: &[u8]) {
     let start = v.len();
-    v.push_str(&header);
-    v.push_str(&mut base64::encode(&key));
+    v.push_str(header);
+    v.push_str(&base64::encode(key));
     crc_encode(v, start);
 }
 
@@ -30,12 +30,10 @@ pub fn crc_encode(buf: &mut String, start: usize) {
     write!(buf, "::{:#05}", crc).expect("error writing to string");
 }
 
-pub fn crc_decode<'a>(buf: &'a str, header: &str) -> Result<Vec<u8>> {
+pub fn crc_decode(buf: &str, header: &str) -> Result<Vec<u8>> {
     let bytes = buf.as_bytes();
     if bytes.len() < 7 || &bytes[bytes.len() - 7..bytes.len() - 5] != b"::" {
-        return Err(Error::msg(format!(
-            "expected ::xxxxx trailing 5 digit crc16"
-        )));
+        return Err(Error::msg("expected ::xxxxx trailing 5 digit crc16".to_string()));
     }
 
     if bytes.len() < header.len() + 7 {
@@ -53,17 +51,17 @@ pub fn crc_decode<'a>(buf: &'a str, header: &str) -> Result<Vec<u8>> {
         )));
     }
 
-    Ok(base64::decode(&data[header.len()..]).context("decode bas64")?)
+    base64::decode(&data[header.len()..]).context("decode bas64")
 }
 
-pub fn parse_header<'a>(data: &'a str, header: &str) -> Result<Vec<u8>> {
+pub fn parse_header(data: &str, header: &str) -> Result<Vec<u8>> {
     if data.starts_with(header) {
         crc_decode(data, header)
     } else {
-        return Err(Error::msg(format!(
+        Err(Error::msg(format!(
             "key does not start with header {}",
             &header
-        )));
+        )))
     }
 }
 

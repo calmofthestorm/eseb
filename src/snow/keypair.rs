@@ -17,7 +17,7 @@ crate::serde_support::derive_serde!(SnowKeyPair, SnowKeyPairVisitor);
 impl std::str::FromStr for SnowKeyPair {
     type Err = anyhow::Error;
     fn from_str(data: &str) -> Result<SnowKeyPair> {
-        let mut key_data = parse_header(data.trim(), &Self::HEADER)?;
+        let mut key_data = parse_header(data.trim(), Self::HEADER)?;
         assert_eq!(key_data.len(), 32 * 3);
         let private = key_data.split_off(64);
         let psk = key_data.split_off(32);
@@ -101,9 +101,9 @@ impl KeyMaterial for SnowKeyPair {
         let mut v = Vec::with_capacity(
             self.public().key().len() + self.private().key().len() + self.psk().key().len(),
         );
-        v.extend_from_slice(&self.public().key());
-        v.extend_from_slice(&self.psk().key());
-        v.extend_from_slice(&self.private().key());
+        v.extend_from_slice(self.public().key());
+        v.extend_from_slice(self.psk().key());
+        v.extend_from_slice(self.private().key());
         v
     }
 }

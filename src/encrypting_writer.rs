@@ -44,8 +44,8 @@ impl<O: RecordWriter> EncryptingWriter<O> {
         self.inner.take().context("already called finish")
     }
 
-    pub(crate) fn write_record_internal<'a>(
-        &'a mut self,
+    pub(crate) fn write_record_internal(
+        &mut self,
         data: &[u8],
         tag: secretstream::Tag,
     ) -> Result<()> {
@@ -66,7 +66,7 @@ impl<O: RecordWriter> Write for EncryptingWriter<O> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         if self.compress {
             let mut v = Vec::default();
-            let mut compressor = brotli::CompressorReader::new(&*buf, 8192, 8, 18);
+            let mut compressor = brotli::CompressorReader::new(buf, 8192, 8, 18);
             compressor
                 .read_to_end(&mut v)
                 .expect("Compression must not fail.");
@@ -74,7 +74,7 @@ impl<O: RecordWriter> Write for EncryptingWriter<O> {
         } else {
             self.write_record_internal(buf, secretstream::Tag::Push)
         }
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+        .map_err(std::io::Error::other)
         .map(|()| buf.len())
     }
 
@@ -86,7 +86,7 @@ impl<O: RecordWriter> Write for EncryptingWriter<O> {
 impl<I: RecordReader> DecryptingReader<I> {
     pub fn new(mut inner: I, key: SymmetricKey, compress: bool) -> Result<DecryptingReader<I>> {
         let data = inner.read_record().context("read header")?;
-        let header = secretstream::xchacha20poly1305::Header::from_slice(&data)
+        let header = secretstream::xchacha20poly1305::Header::from_slice(data)
             .context("parse stream header")?;
 
         let stream = secretstream::Stream::init_pull(&header, key.as_ref())
@@ -153,14 +153,14 @@ impl<I: RecordReader> DecryptingReader<I> {
 impl<O: RecordReader> Read for DecryptingReader<O> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         self.read_internal(buf)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+            .map_err(std::io::Error::other)
     }
 }
 
 impl<O: RecordReader> BufRead for DecryptingReader<O> {
     fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
         self.fill_buf_internal()
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+            .map_err(std::io::Error::other)
     }
 
     fn consume(&mut self, amt: usize) {

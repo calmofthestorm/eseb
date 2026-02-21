@@ -15,7 +15,7 @@ crate::serde_support::derive_serde!(SnowPublicKey, SnowPublicKeyVisitor);
 impl std::str::FromStr for SnowPublicKey {
     type Err = anyhow::Error;
     fn from_str(data: &str) -> Result<SnowPublicKey> {
-        let key_data = parse_header(data.trim(), &Self::HEADER)?;
+        let key_data = parse_header(data.trim(), Self::HEADER)?;
         assert_eq!(key_data.len(), 32);
         Ok(SnowPublicKey { key: key_data })
     }

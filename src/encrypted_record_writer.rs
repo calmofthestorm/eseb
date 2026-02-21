@@ -75,7 +75,7 @@ impl<O: RecordWriter> DecryptingRecordWriter<O> {
 }
 
 impl<O: RecordWriter> RecordWriter for DecryptingRecordWriter<O> {
-    fn write_record<'a>(&'a mut self, data: &[u8]) -> Result<()> {
+    fn write_record(&mut self, data: &[u8]) -> Result<()> {
         match self.inner.take().context("already called finish")? {
             (writer, DecryptState::WantHeader(key), buf) => {
                 let header = secretstream::xchacha20poly1305::Header::from_slice(data)
@@ -182,8 +182,8 @@ impl<O: RecordWriter> EncryptingRecordWriter<O> {
             .context("finalize stream")
     }
 
-    pub(crate) fn write_record_internal<'a>(
-        &'a mut self,
+    pub(crate) fn write_record_internal(
+        &mut self,
         data: &[u8],
         tag: secretstream::Tag,
     ) -> Result<()> {
@@ -201,10 +201,10 @@ impl<O: RecordWriter> EncryptingRecordWriter<O> {
 }
 
 impl<O: RecordWriter> RecordWriter for EncryptingRecordWriter<O> {
-    fn write_record<'a>(&'a mut self, data: &[u8]) -> Result<()> {
+    fn write_record(&mut self, data: &[u8]) -> Result<()> {
         if self.compress {
             let mut v = Vec::default();
-            let mut compressor = brotli::CompressorReader::new(&*data, 8192, 8, 18);
+            let mut compressor = brotli::CompressorReader::new(data, 8192, 8, 18);
             compressor
                 .read_to_end(&mut v)
                 .expect("Compression must not fail.");
@@ -234,7 +234,9 @@ impl<O: RecordWriter> Drop for EncryptingRecordWriter<O> {
     }
 }
 
+#[derive(Default)]
 enum DecryptingRecordReaderState {
+    #[default]
     PreInit,
     Init(secretstream::Stream<secretstream::Pull>),
     Closed,
@@ -248,11 +250,6 @@ pub struct DecryptingRecordReader<I: RecordReader> {
     buf: Vec<u8>,
 }
 
-impl Default for DecryptingRecordReaderState {
-    fn default() -> DecryptingRecordReaderState {
-        DecryptingRecordReaderState::PreInit
-    }
-}
 
 impl<I: RecordReader> DecryptingRecordReader<I> {
     pub fn new(inner: I, key: SymmetricKey, compress: bool) -> Result<DecryptingRecordReader<I>> {
@@ -270,10 +267,10 @@ impl<I: RecordReader> DecryptingRecordReader<I> {
         self.inner
     }
 
-    fn maybe_read_record_internal<'a>(
+    fn maybe_read_record_internal(
         mut stream: secretstream::Stream<secretstream::Pull>,
         reader: &mut I,
-        buf: &'a mut Vec<u8>,
+        buf: &mut Vec<u8>,
     ) -> Result<(Option<secretstream::Stream<secretstream::Pull>>, Vec<u8>)> {
         // The buffer we return must remain valid until the next record is read.
         // We optimize for the case that there is one/few NaCl messages per
@@ -305,7 +302,7 @@ impl<I: RecordReader> DecryptingRecordReader<I> {
         match std::mem::take(&mut self.stream) {
             DecryptingRecordReaderState::PreInit => {
                 let data = self.inner.read_record().context("read header")?;
-                let header = secretstream::xchacha20poly1305::Header::from_slice(&data)
+                let header = secretstream::xchacha20poly1305::Header::from_slice(data)
                     .context("parse stream header")?;
 
                 let stream = secretstream::Stream::init_pull(&header, self.key.as_ref())
@@ -320,7 +317,7 @@ impl<I: RecordReader> DecryptingRecordReader<I> {
 }
 
 impl<I: RecordReader> RecordReader for DecryptingRecordReader<I> {
-    fn maybe_read_record<'a>(&'a mut self) -> Result<Option<&'a [u8]>> {
+    fn maybe_read_record(&mut self) -> Result<Option<&[u8]>> {
         let stream = match self.take_stream()? {
             Some(stream) => stream,
             None => return Ok(None),

@@ -14,7 +14,7 @@ crate::serde_support::derive_serde!(OpaqueKey, OpaqueKeyVisitor);
 impl std::str::FromStr for OpaqueKey {
     type Err = anyhow::Error;
     fn from_str(data: &str) -> Result<OpaqueKey> {
-        let enc_data = parse_header(data.trim(), &Self::HEADER)?;
+        let enc_data = parse_header(data.trim(), Self::HEADER)?;
         let mut decompressor = brotli::reader::Decompressor::new(&*enc_data, 8192);
         let mut data = Vec::default();
         decompressor.read_to_end(&mut data)?;
