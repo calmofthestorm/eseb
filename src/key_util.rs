@@ -33,7 +33,9 @@ pub fn crc_encode(buf: &mut String, start: usize) {
 pub fn crc_decode(buf: &str, header: &str) -> Result<Vec<u8>> {
     let bytes = buf.as_bytes();
     if bytes.len() < 7 || &bytes[bytes.len() - 7..bytes.len() - 5] != b"::" {
-        return Err(Error::msg("expected ::xxxxx trailing 5 digit crc16".to_string()));
+        return Err(Error::msg(
+            "expected ::xxxxx trailing 5 digit crc16".to_string(),
+        ));
     }
 
     if bytes.len() < header.len() + 7 {

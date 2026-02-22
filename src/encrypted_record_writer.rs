@@ -31,13 +31,12 @@ impl<O: RecordWriter> DecryptingRecordWriter<O> {
         })
     }
 
-    #[must_use]
     pub fn into_inner(mut self) -> Result<O> {
-        self.into_inner_internal()?;
+        self.finalize_inner()?;
         Ok(self.inner.take().expect("").0)
     }
 
-    fn into_inner_internal(&mut self) -> Result<()> {
+    fn finalize_inner(&mut self) -> Result<()> {
         let (writer, _state, buf) = self.inner.as_mut().context("already called finish")?;
         if !buf.is_empty() {
             Self::write_internal(writer, buf, Vec::default(), self.compress)
@@ -138,8 +137,7 @@ impl<O: RecordWriter> RecordWriter for DecryptingRecordWriter<O> {
 impl<O: RecordWriter> Drop for DecryptingRecordWriter<O> {
     fn drop(&mut self) {
         if self.inner.is_some() {
-            self.into_inner_internal()
-                .expect("write final chunk at drop");
+            self.finalize_inner().expect("write final chunk at drop");
             self.inner
                 .as_mut()
                 .expect("")
@@ -171,13 +169,12 @@ impl<O: RecordWriter> EncryptingRecordWriter<O> {
         })
     }
 
-    #[must_use]
     pub fn into_inner(mut self) -> Result<O> {
-        self.into_inner_internal()?;
+        self.finalize_inner()?;
         self.inner.take().context("already called finish")
     }
 
-    fn into_inner_internal(&mut self) -> Result<()> {
+    fn finalize_inner(&mut self) -> Result<()> {
         self.write_record_internal(b"", secretstream::Tag::Final)
             .context("finalize stream")
     }
@@ -223,8 +220,7 @@ impl<O: RecordWriter> RecordWriter for EncryptingRecordWriter<O> {
 impl<O: RecordWriter> Drop for EncryptingRecordWriter<O> {
     fn drop(&mut self) {
         if self.inner.is_some() {
-            self.into_inner_internal()
-                .expect("write final chunk at drop");
+            self.finalize_inner().expect("write final chunk at drop");
             self.inner
                 .as_mut()
                 .expect("")
@@ -249,7 +245,6 @@ pub struct DecryptingRecordReader<I: RecordReader> {
     compress: bool,
     buf: Vec<u8>,
 }
-
 
 impl<I: RecordReader> DecryptingRecordReader<I> {
     pub fn new(inner: I, key: SymmetricKey, compress: bool) -> Result<DecryptingRecordReader<I>> {
@@ -383,11 +378,8 @@ mod tests {
     ) -> BufferRecordReader<'static> {
         // Try both ways of decrypting.
         let cleartext1 = {
-            let mut cipher_reader = BufferRecordReader::new(
-                ciphertext.clone(),
-                Format::Record32,
-                std::u32::MAX as usize,
-            );
+            let mut cipher_reader =
+                BufferRecordReader::new(ciphertext.clone(), Format::Record32, u32::MAX as usize);
             let mut clear_writer = DecryptingRecordWriter::new(
                 BufferRecordWriter::new(Format::Record32),
                 key.clone(),
@@ -396,7 +388,7 @@ mod tests {
             .unwrap();
 
             while let Some(rec) = cipher_reader.maybe_read_record().unwrap() {
-                clear_writer.write_record(&rec).unwrap();
+                clear_writer.write_record(rec).unwrap();
             }
 
             clear_writer.into_inner().unwrap().into_cow()
@@ -404,7 +396,7 @@ mod tests {
 
         let cleartext2 = {
             let cipher_reader =
-                BufferRecordReader::new(ciphertext, Format::Record32, std::u32::MAX as usize);
+                BufferRecordReader::new(ciphertext, Format::Record32, u32::MAX as usize);
             let mut clear_reader =
                 DecryptingRecordReader::new(cipher_reader, key, compress).unwrap();
             let mut clear_writer = BufferRecordWriter::new(Format::Record32);
@@ -418,7 +410,7 @@ mod tests {
 
         assert_eq!(cleartext1, cleartext2);
 
-        BufferRecordReader::new(cleartext1, Format::Record32, std::u32::MAX as usize)
+        BufferRecordReader::new(cleartext1, Format::Record32, u32::MAX as usize)
     }
 
     // Needed for backward compatibility to be able to decrypt files from a
@@ -561,13 +553,13 @@ mod tests {
 
         let ciphertext = crypt_writer.into_inner().unwrap().into_cow();
         let mut cipher_reader =
-            BufferRecordReader::new(ciphertext, Format::Record32, std::u32::MAX as usize);
+            BufferRecordReader::new(ciphertext, Format::Record32, u32::MAX as usize);
         let mut clear_writer =
             DecryptingRecordWriter::new(BufferRecordWriter::new(Format::Record32), key, COMPRESS)
                 .unwrap();
 
         while let Some(rec) = cipher_reader.maybe_read_record().unwrap() {
-            clear_writer.write_record(&rec).unwrap();
+            clear_writer.write_record(rec).unwrap();
         }
 
         let err = clear_writer.write_record(b"extra data").unwrap_err();
@@ -590,7 +582,7 @@ mod tests {
 
         let ciphertext = crypt_writer.into_inner().unwrap().into_cow();
         let mut cipher_reader =
-            BufferRecordReader::new(ciphertext, Format::Record32, std::u32::MAX as usize);
+            BufferRecordReader::new(ciphertext, Format::Record32, u32::MAX as usize);
         let mut clear_writer =
             DecryptingRecordWriter::new(BufferRecordWriter::new(Format::Record32), key, COMPRESS)
                 .unwrap();
@@ -622,7 +614,7 @@ mod tests {
         let mut cipher_reader = BufferRecordReader::new(
             cipher_writer.into_cow(),
             Format::Record32,
-            std::u32::MAX as usize,
+            u32::MAX as usize,
         );
         let mut clear_writer =
             DecryptingRecordWriter::new(BufferRecordWriter::new(Format::Record32), key, COMPRESS)

@@ -2,7 +2,7 @@
 
 [package]
 name = "eseb"
-version = "2.0.0"
+version = "2.0.1"
 authors = ["Alex Roper <alex@aroper.net>"]
 edition = "2024"
 description = "Simple symmetric encryption binary using NaCl and Snow."

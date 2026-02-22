@@ -33,7 +33,7 @@ pub fn symmetric_decrypt_verify_file<I: std::io::Read, O: std::io::Write>(
     let writer = record_reader::IoRecordWriter::new(writer, Format::Chunk);
     let mut decrypter =
         encrypted_record_writer::DecryptingRecordWriter::new(writer, key.clone(), compress)?;
-    let mut reader = record_reader::IoRecordReader::from_read(reader, format, std::usize::MAX);
+    let mut reader = record_reader::IoRecordReader::from_read(reader, format, usize::MAX);
 
     while let Some(rec) = reader.maybe_read_record().context("read record")? {
         decrypter
@@ -58,8 +58,7 @@ pub fn symmetric_encrypt_sign_file<I: std::io::BufRead, O: std::io::Write>(
     let writer = record_reader::IoRecordWriter::new(writer, format);
     let mut encrypter =
         encrypted_record_writer::EncryptingRecordWriter::new(writer, key.clone(), compress)?;
-    let mut reader =
-        record_reader::IoRecordReader::from_read(reader, Format::Chunk, std::usize::MAX);
+    let mut reader = record_reader::IoRecordReader::from_read(reader, Format::Chunk, usize::MAX);
 
     while let Some(rec) = reader.maybe_read_record().context("read record")? {
         encrypter

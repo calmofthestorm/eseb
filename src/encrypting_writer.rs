@@ -37,7 +37,6 @@ impl<O: RecordWriter> EncryptingWriter<O> {
         })
     }
 
-    #[must_use]
     pub fn into_inner(mut self) -> Result<O> {
         self.write_record_internal(b"", secretstream::Tag::Final)
             .context("finalize stream")?;
@@ -152,15 +151,13 @@ impl<I: RecordReader> DecryptingReader<I> {
 
 impl<O: RecordReader> Read for DecryptingReader<O> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        self.read_internal(buf)
-            .map_err(std::io::Error::other)
+        self.read_internal(buf).map_err(std::io::Error::other)
     }
 }
 
 impl<O: RecordReader> BufRead for DecryptingReader<O> {
     fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
-        self.fill_buf_internal()
-            .map_err(std::io::Error::other)
+        self.fill_buf_internal().map_err(std::io::Error::other)
     }
 
     fn consume(&mut self, amt: usize) {
@@ -192,7 +189,7 @@ mod tests {
         )
         .unwrap();
 
-        let mut buf = [0 as u8; 64];
+        let mut buf = [0_u8; 64];
 
         assert_eq!(crypt_reader.read(&mut buf[..1]).unwrap(), 0);
     }
@@ -220,7 +217,7 @@ mod tests {
         )
         .unwrap();
 
-        let mut buf = [0 as u8; 64];
+        let mut buf = [0_u8; 64];
 
         crypt_reader.read_exact(&mut buf[..1]).unwrap();
         assert_eq!(&buf[..1], *b"t");
@@ -271,7 +268,7 @@ mod tests {
 
         let ciphertext = crypt_writer.into_inner().unwrap().into_cow();
         let mut cipher_reader =
-            BufferRecordReader::new(ciphertext, Format::Record32, std::u32::MAX as usize);
+            BufferRecordReader::new(ciphertext, Format::Record32, u32::MAX as usize);
         let mut records: Vec<Vec<u8>> = Vec::new();
         while let Some(rec) = cipher_reader.maybe_read_record().unwrap() {
             records.push(rec.to_vec());
@@ -292,7 +289,7 @@ mod tests {
         )
         .unwrap();
 
-        let mut buf = [0 as u8; 16];
+        let mut buf = [0_u8; 16];
         let err = crypt_reader.read(&mut buf).unwrap_err();
         let msg = err.to_string();
         assert!(msg.contains("decrypt chunk"));
