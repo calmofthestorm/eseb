@@ -136,15 +136,18 @@ impl<O: RecordWriter> RecordWriter for DecryptingRecordWriter<O> {
 
 impl<O: RecordWriter> Drop for DecryptingRecordWriter<O> {
     fn drop(&mut self) {
-        if self.inner.is_some() {
-            self.finalize_inner().expect("write final chunk at drop");
-            self.inner
-                .as_mut()
-                .expect("")
-                .0
-                .flush()
-                .expect("flush at drop");
+        if self.inner.is_none() {
+            return;
         }
+
+        self.finalize_inner().expect("write final chunk at drop");
+
+        self.inner
+            .as_mut()
+            .expect("")
+            .0
+            .flush()
+            .expect("flush at drop");
     }
 }
 
@@ -219,14 +222,17 @@ impl<O: RecordWriter> RecordWriter for EncryptingRecordWriter<O> {
 
 impl<O: RecordWriter> Drop for EncryptingRecordWriter<O> {
     fn drop(&mut self) {
-        if self.inner.is_some() {
-            self.finalize_inner().expect("write final chunk at drop");
-            self.inner
-                .as_mut()
-                .expect("")
-                .flush()
-                .expect("flush at drop");
+        if self.inner.is_none() {
+            return;
         }
+
+        self.finalize_inner().expect("write final chunk at drop");
+
+        self.inner
+            .as_mut()
+            .expect("")
+            .flush()
+            .expect("flush at drop");
     }
 }
 
